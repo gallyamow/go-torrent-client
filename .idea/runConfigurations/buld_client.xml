@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="buld client" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="go-torrent-client" />
+    <working_directory value="$PROJECT_DIR$" />
+    <kind value="DIRECTORY" />
+    <package value="github.com/gallyamow/go-torrent-client" />
+    <directory value="$PROJECT_DIR$/cmd" />
+    <filePath value="$PROJECT_DIR$/pkg/bittorrent/torrentfile.go" />
+    <method v="2" />
+  </configuration>
+</component>
