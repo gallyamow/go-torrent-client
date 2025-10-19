@@ -10,5 +10,5 @@ func StringifyPtr[T any](val *T) string {
 	if val == nil {
 		return "nil"
 	}
-	return fmt.Sprintf("%s", *val)
+	return fmt.Sprintf("%v", *val)
 }

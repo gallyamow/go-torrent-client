@@ -3,19 +3,25 @@ package bittorrent
 import (
 	"github.com/gallyamow/go-bencoder"
 	"os"
-	"reflect"
 )
 
-type TorrentFile[T SingleFileInfo | MultipleFileInfo] struct {
+type TorrentFile[T FileInfo] struct {
 	Announce     string  // The announce URL of the tracker (string)
 	CreationDate int64   // (optional) the creation time of the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)
 	Comment      *string // (optional) free-form textual comments of the author (string)
 	CreatedBy    *string // (optional) name and version of the program used to create the .torrent (string)
 	Encoding     *string // (optional) the string encoding format used to generate the pieces part of the info dictionary in the .torrent metafile (string)
-	Info         *T
+	Info         T
 }
 
-func OpenTorrentFile[T SingleFileInfo | MultipleFileInfo](path string) (*TorrentFile[T], error) {
+type FileInfo interface {
+	SingleFileInfo | MultipleFileInfo // union-type реализует один из
+	Size() int64
+	Hash() [32]byte
+	Parse(decoded map[string]any)
+}
+
+func OpenTorrentFile[T FileInfo](path string) (*TorrentFile[T], error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -35,37 +41,32 @@ func OpenTorrentFile[T SingleFileInfo | MultipleFileInfo](path string) (*Torrent
 	return &torrentFile, nil
 }
 
-func parseTorrentFile[T SingleFileInfo | MultipleFileInfo](decoded map[string]any) (TorrentFile[T], error) {
-	torrentFile := TorrentFile[T]{}
+func parseTorrentFile[T FileInfo](decoded map[string]any) (TorrentFile[T], error) {
+	tf := TorrentFile[T]{}
 
 	if val, ok := decoded["creation date"].(int64); ok {
-		torrentFile.CreationDate = val
+		tf.CreationDate = val
 	}
 
 	if val, ok := decoded["announce"].(string); ok {
-		torrentFile.Announce = val
+		tf.Announce = val
 	}
 
 	if val, ok := decoded["comment"].(string); ok {
-		torrentFile.Comment = &val
+		tf.Comment = &val
 	}
 
 	if val, ok := decoded["created by"].(string); ok {
-		torrentFile.CreatedBy = &val
+		tf.CreatedBy = &val
 	}
 
 	if val, ok := decoded["encoding"].(string); ok {
-		torrentFile.Encoding = &val
+		tf.Encoding = &val
 	}
 
-	var t T
-	switch reflect.TypeOf(t) {
-	case reflect.TypeOf(SingleFileInfo{}):
-		info := parseSingleFileInfo(decoded["info"].(map[string]any))
-		torrentFile.Info = any(&info).(*T)
-	case reflect.TypeOf(MultipleFileInfo{}):
-		panic("not implemented")
-	}
+	var info T
+	info.Parse(decoded["info"].(map[string]any))
+	tf.Info = info
 
-	return torrentFile, nil
+	return tf, nil
 }

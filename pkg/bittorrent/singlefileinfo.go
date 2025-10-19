@@ -16,32 +16,36 @@ func (s SingleFileInfo) String() string {
 	return fmt.Sprintf("SingleFileInfo{ PieceLength: %d, Piece: %v, Private: %d, Name: %s, Length: %d, MD5sum: %x }", s.PieceLength, s.Piece, s.Private, s.Name, s.Length, s.MD5sum)
 }
 
-func parseSingleFileInfo(decoded map[string]any) SingleFileInfo {
-	fileInfo := SingleFileInfo{}
+func (s SingleFileInfo) Size() int64 {
+	return s.Length
+}
 
+func (s SingleFileInfo) Hash() [32]byte {
+	return s.MD5sum
+}
+
+func (s SingleFileInfo) Parse(decoded map[string]any) {
 	if val, ok := decoded["piece length"].(int64); ok {
-		fileInfo.PieceLength = val
+		s.PieceLength = val
 	}
 
 	if val, ok := decoded["piece"].([][20]byte); ok {
-		fileInfo.Piece = val
+		s.Piece = val
 	}
 
 	if val, ok := decoded["private"].(int); ok {
-		fileInfo.Private = val
+		s.Private = val
 	}
 
 	if val, ok := decoded["name"].(string); ok {
-		fileInfo.Name = val
+		s.Name = val
 	}
 
 	if val, ok := decoded["length"].(int64); ok {
-		fileInfo.Length = val
+		s.Length = val
 	}
 
 	if val, ok := decoded["md5sum"].([32]byte); ok {
-		fileInfo.MD5sum = val
+		s.MD5sum = val
 	}
-
-	return fileInfo
 }
