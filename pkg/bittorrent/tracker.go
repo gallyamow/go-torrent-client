@@ -11,11 +11,12 @@ import (
 type Tracker struct {
 }
 
-// buildTrackerUrl builds torrent file URL.
+// BuildTrackerUrl builds torrent file URL.
+// TODO: private
 // The base URL consists of the "announce URL" as defined in the metainfo (.torrent) file.
 // The parameters are then added to this URL, using standard CGI methods (i.e. a '?' after the announce URL,
 // followed by 'param=value' sequences separated by '&').
-func buildTrackerUrl[T FileInfo](tf TorrentFile[T], peerID [20]byte, peerPort uint16) (string, error) {
+func BuildTrackerUrl[T FileInfo](tf *TorrentFile[T], peerID [20]byte, peerPort uint16, uploaded, downloaded int64) (string, error) {
 	pu, err := url.Parse(tf.Announce)
 	if err != nil {
 		return "", err
@@ -27,8 +28,8 @@ func buildTrackerUrl[T FileInfo](tf TorrentFile[T], peerID [20]byte, peerPort ui
 	qs.Add("info_hash", string(hash[:]))
 	qs.Add("peer_id", string(peerID[:]))
 	qs.Add("port", strconv.Itoa(int(peerPort)))
-	qs.Add("uploaded", "0")
-	qs.Add("downloaded", "0")
+	qs.Add("uploaded", strconv.FormatInt(uploaded, 10))
+	qs.Add("downloaded", strconv.FormatInt(downloaded, 10))
 
 	qs.Add("left", strconv.FormatInt(tf.Info.Size(), 10))
 	// compact: Setting this to 1 indicates that the client accepts a compact response.

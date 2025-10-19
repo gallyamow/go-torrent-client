@@ -33,15 +33,8 @@ func OpenTorrentFile[T FileInfo](path string) (*TorrentFile[T], error) {
 		return nil, err
 	}
 
-	torrentFile, err := parseTorrentFile[T](tmp.(map[string]any))
-	if err != nil {
-		return nil, err
-	}
+	decoded := tmp.(map[string]any)
 
-	return &torrentFile, nil
-}
-
-func parseTorrentFile[T FileInfo](decoded map[string]any) (TorrentFile[T], error) {
 	tf := TorrentFile[T]{}
 
 	if val, ok := decoded["creation date"].(int64); ok {
@@ -68,5 +61,5 @@ func parseTorrentFile[T FileInfo](decoded map[string]any) (TorrentFile[T], error
 	info.Parse(decoded["info"].(map[string]any))
 	tf.Info = info
 
-	return tf, nil
+	return &tf, nil
 }
