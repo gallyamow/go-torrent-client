@@ -2,10 +2,13 @@ package bittorrent
 
 import (
 	"context"
+	"encoding/binary"
 	"github.com/gallyamow/go-bencoder"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 var (
@@ -13,11 +16,43 @@ var (
 	peerPort = uint16(6999)
 )
 
+func NewTracker() *Tracker {
+	return &Tracker{peerID, peerPort}
+}
+
 // Tracker is an HTTP/HTTPS service which responds to HTTP GET requests.
 // The response includes a peer list that helps the client participate in the torrent.
 type Tracker struct {
 	peerID   [20]byte
 	peerPort uint16
+}
+
+// request requests peers.
+// The base URL consists of the "announce URL" as defined in the metainfo (.torrent) file.
+// The parameters are then added to this URL, using standard CGI methods (i.e. a '?' after the announce URL,
+// followed by 'param=value' sequences separated by '&').
+func (t *Tracker) request(ctx context.Context, announceURL string, request trackerRequest) (*trackerResponse, error) {
+	u, err := buildRequestUrl(announceURL, request)
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	tmp, err := bencoder.Decode(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	trackerResponse := decodeTrackerResponse(tmp.(map[string]any))
+
+	return &trackerResponse, nil
 }
 
 type trackerRequest struct {
@@ -77,7 +112,12 @@ type trackerRequest struct {
 	trackerid *string
 }
 
-func (r trackerRequest) apply(u *url.URL) {
+func buildRequestUrl(announceURL string, r trackerRequest) (string, error) {
+	u, err := url.Parse(announceURL)
+	if err != nil {
+		return "", err
+	}
+
 	qs := url.Values{}
 
 	qs.Add("info_hash", string(r.infoHash[:]))
@@ -123,6 +163,8 @@ func (r trackerRequest) apply(u *url.URL) {
 	}
 
 	u.RawQuery = qs.Encode()
+
+	return u.String(), nil
 }
 
 type trackerResponse struct {
@@ -143,27 +185,60 @@ type trackerResponse struct {
 	// incomplete: number of non-seeder peers, aka "leechers" (integer)
 	incomplete int
 	// peers: (dictionary model) The value is a list of dictionaries, each with the following keys:
-	peers []trackerResponsePeer
+	peers []trackerPeer
 	// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string
 	// consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number.
 	// All in network (big endian) notation.
 	// peers []byte
 }
 
-func (r trackerResponse) Parse(decoded map[string]any) trackerResponse {
-	return trackerResponse{
-		failureReason:  decoded["failure reason"].(*string),
-		warningMessage: decoded["warning message"].(*string),
-		interval:       decoded["interval"].(int),
-		minInterval:    decoded["min interval"].(*int),
-		trackerId:      decoded["tracker id"].(string),
-		complete:       decoded["complete"].(int),
-		incomplete:     decoded["incomplete"].(int),
-		peers:          decoded["peers"].([]trackerResponsePeer),
+func decodeTrackerResponse(decoded map[string]any) trackerResponse {
+	var tr trackerResponse
+
+	// properly handling optional fields
+	if v, ok := decoded["failure reason"].(string); ok {
+		tr.failureReason = &v
 	}
+
+	if v, ok := decoded["warning message"].(string); ok {
+		tr.warningMessage = &v
+	}
+
+	if v, ok := decoded["interval"].(int64); ok {
+		tr.interval = int(v)
+	}
+
+	if v, ok := decoded["min interval"].(int64); ok {
+		vi := int(v)
+		tr.minInterval = &vi
+	}
+
+	if v, ok := decoded["tracker id"].(string); ok {
+		tr.trackerId = v
+	}
+
+	if v, ok := decoded["complete"].(int64); ok {
+		tr.complete = int(v)
+	}
+
+	if v, ok := decoded["incomplete"].(int64); ok {
+		tr.incomplete = int(v)
+	}
+
+	switch v := decoded["peers"].(type) {
+	case []any:
+		for _, peer := range v {
+			if pd, ok := peer.(map[string]any); ok {
+				tr.peers = append(tr.peers, decodeDictTrackerPeer(pd))
+			}
+		}
+	case string: // []byte represents as string
+		tr.peers = decodeBinaryTrackerPeers([]byte(v))
+	}
+	return tr
 }
 
-type trackerResponsePeer struct {
+type trackerPeer struct {
 	// peer id: peer's self-selected ID, as described above for the tracker request (string)
 	PeerID string
 	// ip: peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
@@ -172,43 +247,33 @@ type trackerResponsePeer struct {
 	Port int
 }
 
-func (p trackerResponsePeer) Parse(decoded map[string]any) trackerResponsePeer {
-	return trackerResponsePeer{
-		PeerID: decoded["peer id"].(string),
-		IP:     decoded["ip"].(string),
-		Port:   decoded["port"].(int),
+func decodeDictTrackerPeer(decoded map[string]any) trackerPeer {
+	var p trackerPeer
+
+	if v, ok := decoded["peer id"].(string); ok {
+		p.PeerID = v
 	}
+	if v, ok := decoded["ip"].(string); ok {
+		p.IP = v
+	}
+	if v, ok := decoded["port"].(int64); ok {
+		p.Port = int(v)
+	}
+
+	return p
 }
 
-func NewTracker() *Tracker {
-	return &Tracker{peerID, peerPort}
-}
+func decodeBinaryTrackerPeers(data []byte) []trackerPeer {
+	const peerLen = 6
+	count := len(data) / peerLen
+	peers := make([]trackerPeer, 0, count)
 
-// request requests peers.
-// The base URL consists of the "announce URL" as defined in the metainfo (.torrent) file.
-// The parameters are then added to this URL, using standard CGI methods (i.e. a '?' after the announce URL,
-// followed by 'param=value' sequences separated by '&').
-func (t *Tracker) request(ctx context.Context, announceURL string, request trackerRequest) (*trackerResponse, error) {
-	u, err := url.Parse(announceURL)
-	if err != nil {
-		return nil, err
-	}
-	request.apply(u)
-
-	resp, err := http.Get(u.String())
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	tmp, err := bencoder.Decode(resp.Body)
-	if err != nil {
-		return nil, err
+	for i := 0; i < count; i++ {
+		offset := i * peerLen
+		ip := net.IP(data[offset : offset+4]).String()
+		port := int(binary.BigEndian.Uint16(data[offset+4 : offset+6]))
+		peers = append(peers, trackerPeer{IP: ip, Port: port})
 	}
 
-	decoded := tmp.(map[string]interface{})
-
-	resp = trackerResponse{}
-
-	return &resp, nil
+	return peers
 }
