@@ -2,42 +2,63 @@ package bittorrent
 
 import (
 	"encoding/binary"
-	"errors"
+	"fmt"
 	"net"
-	"strconv"
+	"strings"
 )
 
 type Peer struct {
-	IP   net.IP
-	Port uint16 // port is positive
+	// peer id: peer's self-selected ID, as described above for the tracker RequestAnnounce (string)
+	// @see NoPeerID
+	PeerID string
+	// ip: peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
+	IP net.IP
+	// port: peer's port number (integer)
+	Port uint16
 }
 
 func (p Peer) String() string {
-	return net.JoinHostPort(p.IP.String(), strconv.Itoa(int(p.Port)))
+	return fmt.Sprintf("Peer{ PeerID: %s, IP: %x, Port: %d }", p.PeerID, p.IP, p.Port)
 }
 
 type Peers []Peer
 
-// ParsePeers parses a list of peers from a byte slice.
-// Peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string
-// consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number.
-// All in network (big endian) notation.
-func ParsePeers(bytes []byte) (Peers, error) {
-	const peerSize = 6
-	peersCount := len(bytes) / peerSize
+func (ps Peers) String() string {
+	var sb strings.Builder
+	for _, p := range ps {
+		sb.WriteString(p.String())
+		sb.WriteString(", ")
+	}
+	return sb.String()
+}
 
-	if len(bytes)%6 != 0 {
-		return nil, errors.New("invalid peers length")
+func decodeDictPeer(decoded map[string]any) Peer {
+	var p Peer
+
+	if v, ok := decoded["peer id"].(string); ok {
+		p.PeerID = v
+	}
+	if v, ok := decoded["ip"].(string); ok {
+		p.IP = net.ParseIP(v)
+	}
+	if v, ok := decoded["port"].(int64); ok {
+		p.Port = uint16(v)
 	}
 
-	peers := make(Peers, peersCount)
-	for i := 0; i < peersCount; i++ {
-		offset := i * peerSize
-		peers[i] = Peer{
-			IP:   net.IP(bytes[offset : offset+4]),                      // 4 bytes are the IP address
-			Port: binary.BigEndian.Uint16(bytes[offset+4 : offset+4+2]), // last 2 bytes are the port number
-		}
+	return p
+}
+
+func decodeBinaryPeer(data []byte) []Peer {
+	const peerLen = 6
+	count := len(data) / peerLen
+	peers := make([]Peer, 0, count)
+
+	for i := 0; i < count; i++ {
+		offset := i * peerLen
+		ip := net.IP(data[offset : offset+4])
+		port := binary.BigEndian.Uint16(data[offset+4 : offset+6])
+		peers = append(peers, Peer{IP: ip, Port: port})
 	}
 
-	return peers, nil
+	return peers
 }

@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
-	"github.com/gallyamow/go-torrent-client/pkg/bittorrent"
 	"log"
+
+	"github.com/gallyamow/go-torrent-client/pkg/bittorrent"
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	cmdArgs, err := readCmdArgs()
 	if err != nil {
 		log.Fatalf("failed to parse command %v", err)
@@ -17,9 +22,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open file %v", err)
 	}
+	fmt.Printf("torrent file: %s\n", tf)
 
-	url, _ := bittorrent.BuildTrackerUrl(tf, [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 6881, 0, 0)
-	fmt.Println("url", url)
+	tracker := bittorrent.NewTracker()
+
+	resp, err := tracker.RequestAnnounce(ctx, tf)
+	if err != nil {
+		log.Fatalf("failed to open file %v", err)
+	}
+
+	//fmt.Printf("announce: %s\n", resp)
+	if resp.FailureReason != nil {
+		log.Fatalf("failed to request announce %q", *resp.FailureReason)
+	}
 }
 
 type cmdArgs struct {

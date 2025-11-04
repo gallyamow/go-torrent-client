@@ -1,6 +1,10 @@
 package bittorrent
 
-import "fmt"
+import (
+	"crypto/sha1"
+	"fmt"
+	"github.com/gallyamow/go-bencoder"
+)
 
 // SingleFileInfo represents dictionary item for single file mode.
 type SingleFileInfo struct {
@@ -13,15 +17,16 @@ type SingleFileInfo struct {
 }
 
 func (s SingleFileInfo) String() string {
-	return fmt.Sprintf("SingleFileInfo{ PieceLength: %d, Piece: %v, Private: %d, Name: %s, Length: %d, MD5sum: %x }", s.PieceLength, s.Piece, s.Private, s.Name, s.Length, s.MD5sum)
+	return fmt.Sprintf("SingleFileInfo{ PieceLength: %d, Piece: %v, Private: %d, Name: %s, Length: %d, MD5sum: %s }",
+		s.PieceLength, s.Piece, s.Private, s.Name, s.Length, string(s.MD5sum[:]))
 }
 
 func (s SingleFileInfo) Size() int64 {
 	return s.Length
 }
 
-func (s SingleFileInfo) Hash() [32]byte {
-	return s.MD5sum
+func (s SingleFileInfo) Hash() [20]byte {
+	return sha1.Sum(bencoder.Encode(s))
 }
 
 func (s SingleFileInfo) Parse(decoded map[string]any) {

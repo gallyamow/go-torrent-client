@@ -1,9 +1,18 @@
 package bittorrent
 
 import (
+	"fmt"
 	"github.com/gallyamow/go-bencoder"
 	"os"
 )
+
+type FileInfo interface {
+	SingleFileInfo | MultipleFileInfo // union-type реализует один из
+	Size() int64
+	Hash() [20]byte
+	Parse(decoded map[string]any)
+	String() string
+}
 
 type TorrentFile[T FileInfo] struct {
 	Announce     string  // The announce URL of the tracker (string)
@@ -14,11 +23,9 @@ type TorrentFile[T FileInfo] struct {
 	Info         T
 }
 
-type FileInfo interface {
-	SingleFileInfo | MultipleFileInfo // union-type реализует один из
-	Size() int64
-	Hash() [32]byte
-	Parse(decoded map[string]any)
+func (tf *TorrentFile[T]) String() string {
+	return fmt.Sprintf("TorrentFile{ Announce: %s, CreationDate: %d, Comment: %s, CreatedBy: %s, Encoding: %s, Info: %s }",
+		tf.Announce, tf.CreationDate, StringifyPtr(tf.Comment), StringifyPtr(tf.CreatedBy), StringifyPtr(tf.Encoding), tf.Info.String())
 }
 
 func OpenTorrentFile[T FileInfo](path string) (*TorrentFile[T], error) {
