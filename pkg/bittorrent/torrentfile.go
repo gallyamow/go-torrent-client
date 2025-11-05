@@ -1,6 +1,7 @@
 package bittorrent
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gallyamow/go-bencoder"
 	"os"
@@ -40,6 +41,10 @@ func OpenTorrentFile[T FileInfo](path string) (*TorrentFile[T], error) {
 		return nil, err
 	}
 
+	if tmp == nil {
+		return nil, errors.New("failed to decode torrent file")
+	}
+
 	decoded := tmp.(map[string]any)
 
 	tf := TorrentFile[T]{}
@@ -64,9 +69,11 @@ func OpenTorrentFile[T FileInfo](path string) (*TorrentFile[T], error) {
 		tf.Encoding = &val
 	}
 
-	var info T
-	info.Parse(decoded["info"].(map[string]any))
-	tf.Info = info
+	if val, ok := decoded["info"].(map[string]any); ok {
+		var info T
+		info.Parse(val)
+		tf.Info = info
+	}
 
 	return &tf, nil
 }

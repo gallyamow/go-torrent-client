@@ -41,6 +41,8 @@ func (t *Tracker) RequestAnnounce(ctx context.Context, tf *TorrentFile[SingleFil
 		Left:     tf.Info.Size(),
 	}
 
+	//fmt.Printf("%#v", tr)
+
 	u, err := buildRequestUrl(tf.Announce, tr)
 	if err != nil {
 		return nil, err

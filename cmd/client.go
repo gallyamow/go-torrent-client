@@ -20,7 +20,7 @@ func main() {
 
 	tf, err := bittorrent.OpenTorrentFile[bittorrent.SingleFileInfo](cmdArgs.torrentFile)
 	if err != nil {
-		log.Fatalf("failed to open file %v", err)
+		log.Fatalf("failed to open file: %v", err)
 	}
 	fmt.Printf("torrent file: %s\n", tf)
 
@@ -28,12 +28,12 @@ func main() {
 
 	resp, err := tracker.RequestAnnounce(ctx, tf)
 	if err != nil {
-		log.Fatalf("failed to open file %v", err)
+		log.Fatalf("failed to open file: %v", err)
 	}
 
-	//fmt.Printf("announce: %s\n", resp)
+	fmt.Printf("announce response: %s\n", resp)
 	if resp.FailureReason != nil {
-		log.Fatalf("failed to request announce %q", *resp.FailureReason)
+		log.Fatalf("failed to request announce: %q", *resp.FailureReason)
 	}
 }
 
@@ -43,7 +43,7 @@ type cmdArgs struct {
 }
 
 func readCmdArgs() (cmdArgs, error) {
-	torrentFile := flag.String("path", "./kubuntu-7.10-alternate-amd64.iso.torrent", "Torrent file")
+	torrentFile := flag.String("path", "./example.torrent", "Torrent file")
 	verbose := flag.Bool("verbose", false, "Verbose mode")
 	flag.Parse()
 
